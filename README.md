@@ -42,3 +42,5 @@ A fully offline alternatives to Google Photos / Apple Photos.
 ## Tech Stack
 - **Backend**: FastAPI, FAISS, SQLite, CLIP, Face_recognition, Tesseract.
 - **Frontend**: React, Tailwind CSS, Lucide, Framer Motion, Leaflet.
+
+# Offline-Image-Search
