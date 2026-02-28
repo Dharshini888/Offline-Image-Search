@@ -65,7 +65,7 @@ const App = () => {
             const formData = new FormData();
             formData.append("query", query);
             const res = await axios.post(`${API_URL}/search`, formData);
-            
+
             // Handle both success and error responses
             if (res.data.status === "error") {
                 setResults([]);
@@ -396,10 +396,10 @@ const App = () => {
                                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                                             {group.images && group.images.map((img, j) => (
                                                                 <div key={j} className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group/dup bg-zinc-900 border border-white/5">
-                                                                    <img 
-                                                                        src={`${API_URL}/images/${img.filename}`} 
+                                                                    <img
+                                                                        src={`${API_URL}/images/${img.filename}`}
                                                                         className="w-full h-full object-cover group-hover/dup:opacity-75 transition-opacity"
-                                                                        onClick={() => setSelectedImage(img)} 
+                                                                        onClick={() => setSelectedImage(img)}
                                                                     />
                                                                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/dup:opacity-100 transition-opacity flex flex-col items-center justify-center">
                                                                         {img.size && (
@@ -426,8 +426,8 @@ const App = () => {
             )}
 
             {selectedPerson && (
-                <PersonDetail 
-                    person={selectedPerson} 
+                <PersonDetail
+                    person={selectedPerson}
                     onClose={() => setSelectedPerson(null)}
                     onRename={handleRenamePerson}
                     onCelebCheck={handleCelebCheck}

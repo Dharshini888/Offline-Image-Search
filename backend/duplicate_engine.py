@@ -227,8 +227,10 @@ class DuplicateEngine:
                         {
                             'id': img.id,
                             'filename': img.filename,
+                            'thumbnail': f"/images/{img.filename}",
                             'size': os.path.getsize(img.original_path) if os.path.exists(img.original_path) else 0,
                             'path': img.original_path,
+                            'date': img.timestamp.isoformat() if img.timestamp else None
                         }
                         for img in duplicates_of_this
                     ],
