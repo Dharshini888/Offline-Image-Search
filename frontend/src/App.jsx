@@ -22,6 +22,7 @@ const App = () => {
     const [query, setQuery] = useState("");
     const [selectedImage, setSelectedImage] = useState(null);
     const [selectedPerson, setSelectedPerson] = useState(null);
+    const [selectedAlbum, setSelectedAlbum] = useState(null);
     const [personNameEdit, setPersonNameEdit] = useState("");
     const [personSuggestions, setPersonSuggestions] = useState([]);
     const fileInputRef = useRef(null);
@@ -53,6 +54,26 @@ const App = () => {
             console.error("Fetch failed", err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAlbumClick = async (album) => {
+        // Set basic info immediately so modal opens, then load photos
+        setSelectedAlbum({ ...album, images: null });
+        try {
+            const res = await axios.get(`${API_URL}/albums/${album.id}`);
+            const data = res.data;
+            setSelectedAlbum({
+                id:          data.id,
+                title:       data.title,
+                type:        data.type,
+                date:        data.date,
+                cover:       data.cover,
+                image_count: data.image_count,
+                images:      data.images || data.results || [],
+            });
+        } catch (err) {
+            console.error("Failed to load album", err);
         }
     };
 
@@ -138,10 +159,25 @@ const App = () => {
         }
     };
 
-    const handlePersonClick = (person) => {
-        setSelectedPerson(person);
-        setPersonNameEdit(person.name);
+    const handlePersonClick = async (person) => {
         setPersonSuggestions([]);
+        setPersonNameEdit(person.name);
+        // Set basic info immediately so modal opens instantly
+        setSelectedPerson({ ...person, images: null });
+        try {
+            // Fetch full person data including their photo gallery
+            const res = await axios.get(`${API_URL}/people/${person.id}`);
+            const data = res.data;
+            setSelectedPerson({
+                id:         data.id,
+                name:       data.name,
+                count:      data.face_count ?? data.images?.length ?? person.count,
+                cover:      data.cover,
+                images:     data.images || data.results || [],
+            });
+        } catch (err) {
+            console.error("Failed to load person detail", err);
+        }
     };
 
     const handleRenamePerson = async (personId, newName) => {
@@ -240,7 +276,27 @@ const App = () => {
                             placeholder="Search for 'vacation 2024' or '🐶 at 🏖️'..."
                             className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-3 pl-12 pr-4 focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all font-medium"
                         />
-                        <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors">
+                        <button
+                            type="button"
+                            title="Voice search"
+                            onClick={async () => {
+                                setLoading(true);
+                                setView("search");
+                                try {
+                                    const formData = new FormData();
+                                    formData.append("duration", "5");
+                                    const res = await axios.post(`${API_URL}/search/voice`, formData);
+                                    if (res.data.transcribed) setQuery(res.data.transcribed);
+                                    if (res.data.results) setResults(res.data.results);
+                                    else setResults([]);
+                                } catch (err) {
+                                    console.error("Voice search failed", err);
+                                } finally {
+                                    setLoading(false);
+                                }
+                            }}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-blue-400 transition-colors"
+                        >
                             <Mic className="w-4 h-4" />
                         </button>
                     </form>
@@ -340,7 +396,7 @@ const App = () => {
                                         ) : (
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                                                 {albums.map((album, i) => (
-                                                    <AlbumCard key={i} album={album} />
+                                                    <AlbumCard key={i} album={album} onClick={() => handleAlbumClick(album)} />
                                                 ))}
                                             </div>
                                         )}
@@ -425,6 +481,13 @@ const App = () => {
                 <Lightbox image={selectedImage} onClose={() => setSelectedImage(null)} />
             )}
 
+            {selectedAlbum && (
+                <AlbumDetail
+                    album={selectedAlbum}
+                    onClose={() => setSelectedAlbum(null)}
+                />
+            )}
+
             {selectedPerson && (
                 <PersonDetail
                     person={selectedPerson}
@@ -507,21 +570,31 @@ const FaceCircle = ({ person, onClick }) => (
     </div>
 );
 
-const AlbumCard = ({ album }) => (
+const AlbumCard = ({ album, onClick }) => (
     <motion.div
         whileHover={{ scale: 1.02, y: -4 }}
+        onClick={onClick}
         className="relative aspect-[4/3] rounded-2xl overflow-hidden cursor-pointer group bg-zinc-900 border border-white/5 shadow-lg"
     >
-        {/* Cover image or placeholder */}
+        {/* Cover image — API returns /images/filename so use it directly */}
         {album.cover ? (
             <img
-                src={`${API_URL}/images/${album.cover}`}
+                src={`${API_URL}${album.cover}`}
                 className="absolute inset-0 w-full h-full object-cover"
                 loading="lazy"
+                onError={(e) => { e.target.style.display = 'none'; }}
             />
         ) : (
             <div className="absolute inset-0 bg-zinc-800 flex items-center justify-center">
                 <BookImage className="w-12 h-12 text-zinc-700" />
+            </div>
+        )}
+        {/* Thumbnail strip */}
+        {album.thumbnails && album.thumbnails.length > 1 && (
+            <div className="absolute bottom-0 left-0 right-0 flex h-12 gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                {album.thumbnails.slice(0, 4).map((t, i) => (
+                    <img key={i} src={`${API_URL}${t}`} className="flex-1 h-full object-cover" />
+                ))}
             </div>
         )}
         {/* Overlay */}
@@ -665,12 +738,16 @@ const PersonDetail = ({ person, onClose, onRename, onCelebCheck, suggestions, na
                 {/* Photo gallery */}
                 <div className="mb-6">
                     <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Photos</p>
-                    {person.images && person.images.length > 0 ? (
+                    {person.images === null ? (
+                        <div className="flex items-center justify-center py-8">
+                            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : person.images && person.images.length > 0 ? (
                         <div className="grid grid-cols-3 gap-4">
                             {person.images.map((img, i) => (
                                 <div key={i} className="aspect-square rounded-lg overflow-hidden bg-zinc-800 border border-white/5">
                                     <img
-                                        src={`${API_URL}/images/${img.filename}`}
+                                        src={`${API_URL}${img.thumbnail ? img.thumbnail : "/images/" + img.filename}`}
                                         className="w-full h-full object-cover hover:scale-110 transition-transform cursor-pointer"
                                         title={img.date}
                                     />
@@ -678,11 +755,75 @@ const PersonDetail = ({ person, onClose, onRename, onCelebCheck, suggestions, na
                             ))}
                         </div>
                     ) : (
-                        <p className="text-zinc-500 text-sm">No photos available</p>
+                        <div className="flex flex-col items-center py-8 text-zinc-500">
+                            <ImageOff className="w-10 h-10 mb-3 opacity-20" />
+                            <p className="text-sm">No photos found for this person.</p>
+                            <p className="text-xs mt-1 text-zinc-600">Try clicking Re-index People &amp; Albums.</p>
+                        </div>
                     )}
                 </div>
             </motion.div>
         </motion.div>
     );
 };
-export default App; 
+const AlbumDetail = ({ album, onClose }) => (
+    <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-3xl"
+    >
+        <motion.div
+            initial={{ scale: 0.95, y: 20 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.95, y: 20 }}
+            className="w-full max-w-4xl bg-zinc-900 border border-white/5 rounded-3xl p-8 max-h-[90vh] overflow-y-auto"
+        >
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight">{album.title}</h2>
+                    <div className="flex items-center gap-3 mt-1">
+                        {album.type && (
+                            <span className="bg-blue-600/20 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                {album.type}
+                            </span>
+                        )}
+                        {album.date && <span className="text-xs text-zinc-500">{album.date}</span>}
+                        {album.image_count != null && (
+                            <span className="text-xs text-zinc-500">{album.image_count} photos</span>
+                        )}
+                    </div>
+                </div>
+                <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+                    <X size={24} className="text-zinc-400" />
+                </button>
+            </div>
+
+            {album.images === null ? (
+                <div className="flex items-center justify-center py-20">
+                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+            ) : album.images.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
+                    <ImageOff className="w-12 h-12 mb-4 opacity-20" />
+                    <p className="text-lg font-bold text-white mb-2">No photos in this album yet</p>
+                    <p className="text-sm">Try clicking Re-index People &amp; Albums to rebuild.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {album.images.map((img, i) => (
+                        <div key={i} className="aspect-square rounded-xl overflow-hidden bg-zinc-800 border border-white/5 group cursor-pointer">
+                            <img
+                                src={`${API_URL}${img.thumbnail ? img.thumbnail : "/images/" + img.filename}`}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                title={img.date}
+                            />
+                        </div>
+                    ))}
+                </div>
+            )}
+        </motion.div>
+    </motion.div>
+);
+
+export default App;
